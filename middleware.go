@@ -30,6 +30,7 @@ func Time(next http.Handler) http.Handler {
 type MiddlewareFunc func(http.Handler) http.Handler
 
 // JWTMiddleware is a middleware that verifies JWT tokens.
+// Takes in audience string, secret string
 func JWTMiddlewareHMAC(audience string, secret string) MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
