@@ -1,9 +1,9 @@
-// Package hmacmiddleware provides middleware for verifying JWT tokens using HMACSHA256.
+// Package cyptohmac provides middleware for verifying JWT tokens using HMACSHA256.
 // It ensures that incoming requests are properly authenticated before proceeding to the next handler.
 // Author: Daniel Chahla
 // Twitter: @dchahla
 // Version: v1.0.2
-package hmacmiddleware
+package cyptohmac
 
 import (
 	"net/http"
