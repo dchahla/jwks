@@ -1,8 +1,8 @@
-// tea is a package for verifying id tokens using JWTMiddlewareHMAC.
+// peel is a package for verifying id tokens using JWTMiddlewareHMAC.
 // Daniel Chahla
 // @dchahla
 // version v1.0.0
-package tea
+package peel
 
 import (
 	"fmt"
