@@ -2,7 +2,7 @@
 // It ensures that incoming requests are properly authenticated before proceeding to the next handler.
 // Author: Daniel Chahla
 // Twitter: @dchahla
-// Version: v1.0.0
+// Version: v1.0.2
 package hmacmiddleware
 
 import (
