@@ -13,7 +13,6 @@ import (
 
 // MiddlewareFunc represents a middleware function that takes an http.Handler and returns an http.Handler.
 type MiddlewareFunc func(http.Handler) http.Handler
-
 // Verify is a middleware that verifies JWT tokens using HMACSHA256.
 // It takes in an HMACSHA256 secret string (your-256-bit-secret).
 func Verify(HMACSHA256Secret string) MiddlewareFunc {
