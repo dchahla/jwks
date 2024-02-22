@@ -26,33 +26,39 @@ func Time(next http.Handler) http.Handler {
     })
 }
 
-// JWTMiddleware validates JWT tokens.
-func JWTMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Validate the JWT token
-        tokenString := extractToken(r)
-        if tokenString == "" {
-            http.Error(w, "Unauthorized", http.StatusUnauthorized)
-            return
-        }
+// MiddlewareFunc is a type that represents a middleware function.
+type MiddlewareFunc func(http.Handler) http.Handler
 
-        token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-            // Validate the token signing method
-            if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-                return nil, jwt.ErrSignatureInvalid
+// JWTMiddleware is a middleware that verifies JWT tokens.
+func JWTMiddleware(audience string) MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            // Validate the JWT token
+            tokenString := extractToken(r)
+            if tokenString == "" {
+                http.Error(w, "Unauthorized", http.StatusUnauthorized)
+                return
             }
-            return []byte("your-secret-key"), nil
+    
+            token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+                // Validate the token signing method
+                if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+                    return nil, jwt.ErrSignatureInvalid
+                }
+                return []byte("your-secret-key"), nil
+            })
+    
+            if err != nil || !token.Valid {
+                http.Error(w, "Unauthorized", http.StatusUnauthorized)
+                return
+            }
+    
+            // Token is valid, call the next handler
+            next.ServeHTTP(w, r)
         })
-
-        if err != nil || !token.Valid {
-            http.Error(w, "Unauthorized", http.StatusUnauthorized)
-            return
-        }
-
-        // Token is valid, call the next handler
-        next.ServeHTTP(w, r)
-    })
+	}
 }
+
 
 // extractToken extracts the token from the request headers.
 func extractToken(r *http.Request) string {
