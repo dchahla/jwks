@@ -1,4 +1,4 @@
-package googlemiddleware
+package tea
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 // MiddlewareFunc is a type that represents a middleware function.
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// googleMiddleware is a middleware that logs requests.
-func googleMiddleware(next http.Handler) http.Handler {
+// tea is a middleware that logs requests.
+func Time(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         // Middleware logic goes here
         // For example, log the request
