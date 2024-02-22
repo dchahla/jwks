@@ -1,35 +1,20 @@
-// peel is a package for verifying id tokens using JWTMiddlewareHMAC.
+// hmacmiddleware is a minimalistic package for verifying id tokens using HMACSHA256.
 // Daniel Chahla
 // @dchahla
 // version v1.0.0
-package peel
+package hmacmiddleware
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/golang-jwt/jwt"
 )
 
-// // HandlerFunc is a type that represents a request handler function.
-// type HandlerFunc func(http.ResponseWriter, *http.Request)
-
-// Time is a middleware that logs requests.
-func Time(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Middleware logic goes here
-        // For example, log the request
-        fmt.Println("Request URL:", r.URL.String())
-        // Call the next handler
-        next.ServeHTTP(w, r)
-    })
-}
-
 // MiddlewareFunc is a type that represents a middleware function.
 type MiddlewareFunc func(http.Handler) http.Handler
-// JWTMiddleware is a middleware that verifies JWT tokens.
-// Takes in audience string, secret string
-func JWTMiddlewareHMAC(audience string, secret string) MiddlewareFunc {
+// verify is a middleware that verifies JWT tokens.
+// Takes in HMACSHA256Secret string (your-256-bit-secret)
+func verify(HMACSHA256Secret string) MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
             // Validate the JWT token
@@ -43,7 +28,7 @@ func JWTMiddlewareHMAC(audience string, secret string) MiddlewareFunc {
                 if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
                     return nil, jwt.ErrSignatureInvalid
                 }
-                return []byte(secret), nil
+                return []byte(HMACSHA256Secret), nil
             })
     
             if err != nil || !token.Valid {
