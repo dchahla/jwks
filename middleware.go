@@ -1,4 +1,7 @@
-// tea is a package containing middleware functions.
+// tea is a package for verifying id tokens using JWTMiddlewareHMAC.
+// Daniel Chahla
+// @dchahla
+// version 1.0.0
 package tea
 
 import (
@@ -7,9 +10,6 @@ import (
 
 	"github.com/golang-jwt/jwt"
 )
-
-// // MiddlewareFunc is a type that represents a middleware function.
-// type MiddlewareFunc func(http.Handler) http.Handler
 
 // // HandlerFunc is a type that represents a request handler function.
 // type HandlerFunc func(http.ResponseWriter, *http.Request)
@@ -28,7 +28,6 @@ func Time(next http.Handler) http.Handler {
 
 // MiddlewareFunc is a type that represents a middleware function.
 type MiddlewareFunc func(http.Handler) http.Handler
-
 // JWTMiddleware is a middleware that verifies JWT tokens.
 // Takes in audience string, secret string
 func JWTMiddlewareHMAC(audience string, secret string) MiddlewareFunc {
@@ -40,7 +39,6 @@ func JWTMiddlewareHMAC(audience string, secret string) MiddlewareFunc {
                 http.Error(w, "Unauthorized", http.StatusUnauthorized)
                 return
             }
-    
             token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
                 // Validate the token signing method
                 if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
