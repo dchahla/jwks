@@ -1,3 +1,4 @@
+// tea is a package containing middleware functions.
 package tea
 
 import (
@@ -7,12 +8,30 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
+// // MiddlewareFunc is a type that represents a middleware function.
+// type MiddlewareFunc func(http.Handler) http.Handler
+
+// // HandlerFunc is a type that represents a request handler function.
+// type HandlerFunc func(http.ResponseWriter, *http.Request)
+
+// Time is a middleware that logs requests.
+func Time(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Middleware logic goes here
+        // For example, log the request
+        fmt.Println("Request URL:", r.URL.String())
+        
+        // Call the next handler
+        next.ServeHTTP(w, r)
+    })
+}
+
 // MiddlewareFunc is a type that represents a middleware function.
 type MiddlewareFunc func(http.Handler) http.Handler
 
 // JWTMiddleware is a middleware that verifies JWT tokens.
-func JWTMiddleware(audience string) MiddlewareFunc {
-    return func(next http.Handler) http.Handler {
+func JWTMiddlewareHMAC(audience string, secret string) MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
             // Validate the JWT token
             tokenString := extractToken(r)
@@ -20,38 +39,26 @@ func JWTMiddleware(audience string) MiddlewareFunc {
                 http.Error(w, "Unauthorized", http.StatusUnauthorized)
                 return
             }
-
-            // Parse the token
+    
             token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-                // Check token signing method
+                // Validate the token signing method
                 if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-                    return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+                    return nil, jwt.ErrSignatureInvalid
                 }
-                // Provide the key to validate the token
-                return []byte("your-secret-key"), nil
+                return []byte(secret), nil
             })
-            if err != nil {
-                http.Error(w, err.Error(), http.StatusUnauthorized)
+    
+            if err != nil || !token.Valid {
+                http.Error(w, "Unauthorized", http.StatusUnauthorized)
                 return
             }
-
-            // Validate token claims
-            if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-                // Check audience claim
-                if claims["aud"].(string) != audience {
-                    http.Error(w, "Invalid audience", http.StatusUnauthorized)
-                    return
-                }
-            } else {
-                http.Error(w, "Invalid token", http.StatusUnauthorized)
-                return
-            }
-
+    
             // Token is valid, call the next handler
             next.ServeHTTP(w, r)
         })
-    }
+	}
 }
+
 
 // extractToken extracts the token from the request headers.
 func extractToken(r *http.Request) string {
