@@ -1,7 +1,7 @@
 // tea is a package for verifying id tokens using JWTMiddlewareHMAC.
 // Daniel Chahla
 // @dchahla
-// version 1.0.0
+// version v1.0.0
 package tea
 
 import (
@@ -20,7 +20,6 @@ func Time(next http.Handler) http.Handler {
         // Middleware logic goes here
         // For example, log the request
         fmt.Println("Request URL:", r.URL.String())
-        
         // Call the next handler
         next.ServeHTTP(w, r)
     })
