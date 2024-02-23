@@ -2,7 +2,6 @@ package jwks
 
 import (
 	"bytes"
-	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -165,11 +164,12 @@ func Verify(audience string, algorithm string, keys *KeySet) MiddlewareFunc {
 				log.Fatal(err)
 			}
 			if userToken.Audience == audience && userToken.Issuer == "https://securetoken.google.com/"+audience {
-				ctx := r.Context() 
-				ctx = context.WithValue(ctx, "claims", string(payload))
-				next.ServeHTTP(w, r.WithContext(ctx))
+				// successfully validated 
+                r.Header.Set("User-Claims", string(payload))
+                next.ServeHTTP(w, r)
+                //
 			} else {
-				fmt.Println("https://securetoken.google.com/"+audience)
+				fmt.Println("Received https://securetoken.google.com/"+userToken.Audience, "Expected: https://securetoken.google.com/"+audience)
 
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			}
