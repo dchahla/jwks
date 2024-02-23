@@ -170,7 +170,7 @@ func Verify(audience string, algorithm string, keys *KeySet) MiddlewareFunc {
 				r.Header.Set("User", string(payload))
 				next.ServeHTTP(w, r)
 			} else {
-				fmt.Println("https://securetoken.google.com/"+audience)
+				fmt.Println("Expected JWT audience to be : https://securetoken.google.com/"+audience)
 
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			}
