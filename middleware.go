@@ -76,7 +76,7 @@ func InitKeySet() KeySet {
 
 	// Iterate over each key and construct public key
 	for _, key := range keyContainer.Keys {
-		if count < 2 { // Check if it's the second iteration (index 1)
+		if count == 1 { // Check if it's the second iteration (index 1)
 			// Decode base64url encoded strings
 			modulus, err := decodeBase64URL(key.N)
 			if err != nil {
@@ -168,11 +168,8 @@ func Verify(audience string, algorithm string, keys *KeySet) MiddlewareFunc {
 				ctx := r.Context() 
 				ctx = context.WithValue(ctx, "claims", string(payload))
 				next.ServeHTTP(w, r.WithContext(ctx))
-                // r.Header.Set("User-Claims", string(payload))
-                // next.ServeHTTP(w, r)
-                //
 			} else {
-				fmt.Println("Received https://securetoken.google.com/"+userToken.Audience, "Expected: https://securetoken.google.com/"+audience)
+				fmt.Println("https://securetoken.google.com/"+audience)
 
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			}
