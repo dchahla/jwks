@@ -69,14 +69,14 @@ func InitKeySet() KeySet {
 	if err := json.Unmarshal([]byte(string(body)), &keyContainer); err != nil {
 		log.Fatal(err)
 	}
-	count := 0
+	// count := 0
 
 	// Initialize KeySet
 	var keySet KeySet
 
 	// Iterate over each key and construct public key
 	for _, key := range keyContainer.Keys {
-		if count == 1 { // Check if it's the second iteration (index 1)
+		// if count < 2 { // Check if it's the second iteration (index 1)
 			// Decode base64url encoded strings
 			modulus, err := decodeBase64URL(key.N)
 			if err != nil {
@@ -120,9 +120,9 @@ func InitKeySet() KeySet {
 				fmt.Println("Failed to update keys:", err)
 			}
 
-			return keySet
-		}
-		count++
+			// return keySet
+		// }
+		// count++
 	}
 
 	return keySet
@@ -240,6 +240,7 @@ func verifyTokenWithFallback(tok string, keys *KeySet, algorithm string) error {
     if err == nil {
         return nil // Token verified successfully with primary key
     }
+	// fmt.Println(claims)
     // If verification fails with the primary key and it did not return claims, try fallback keys
     if claims == nil {
         // Iterate through the last two fallback keys
@@ -251,6 +252,7 @@ func verifyTokenWithFallback(tok string, keys *KeySet, algorithm string) error {
             }
         }
     }
+
     // All attempts failed, return an error
     return fmt.Errorf("failed to verify token with all keys")
 }
