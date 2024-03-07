@@ -39,9 +39,6 @@ type KeySet struct {
 type MiddlewareFunc func(http.Handler) http.Handler
 
 func StartKeySetUpdateRoutine(keys *KeySet) {
-    ticker := time.NewTicker(time.Hour) // Set the ticker to run every hour
-    defer ticker.Stop() // Stop the ticker when the function returns
-
     // Define a function to update the key set
     updateFunc := func() {
         newKeys := InitKeySet()
@@ -52,8 +49,14 @@ func StartKeySetUpdateRoutine(keys *KeySet) {
         }
     }
 
-    // Run the update function immediately and then at every tick
-    updateFunc()
+    // Run the update function once after an initial delay of an hour
+    time.AfterFunc(time.Hour, updateFunc)
+
+    // Set up ticker to run the update function every hour
+    ticker := time.NewTicker(time.Hour)
+    defer ticker.Stop()
+
+    // Run the update function at every tick
     for {
         select {
         case <-ticker.C:
