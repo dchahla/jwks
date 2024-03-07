@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
 	jwt "github.com/golang-jwt/jwt/v5"
 )
@@ -37,7 +38,29 @@ type KeySet struct {
 }
 type MiddlewareFunc func(http.Handler) http.Handler
 
+func StartKeySetUpdateRoutine(keys *KeySet) {
+    ticker := time.NewTicker(time.Hour) // Set the ticker to run every hour
+    defer ticker.Stop() // Stop the ticker when the function returns
 
+    // Define a function to update the key set
+    updateFunc := func() {
+        newKeys := InitKeySet()
+        if err := updateKeysIfNewPrimary(newKeys.Primary, keys); err != nil {
+            // Handle error
+            // For example, log the error
+            log.Println("Failed to update keys:", err)
+        }
+    }
+
+    // Run the update function immediately and then at every tick
+    updateFunc()
+    for {
+        select {
+        case <-ticker.C:
+            updateFunc()
+        }
+    }
+}
 func InitKeySet() KeySet {
 	// Define a struct to represent the JSON data
 	type Key struct {
