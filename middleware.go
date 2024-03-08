@@ -1,219 +1,339 @@
 package jwks
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math/big"
 	"net/http"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt/v5"
 )
-
 type FirebaseToken struct {
-	Audience string `json:"aud"`
-	// Add other fields from FirebaseToken struct if needed
+    Audience     string `json:"aud"`
+    AuthTime     int64  `json:"auth_time"`
+    Expiry       int64  `json:"exp"`
+    Firebase     struct {
+        Identities      map[string]interface{} `json:"identities"`
+        SignInProvider  string                 `json:"sign_in_provider"`
+    } `json:"firebase"`
+    IssuedAt     int64  `json:"iat"`
+    Issuer       string `json:"iss"`
+    ProviderID   string `json:"provider_id"`
+    Subject      string `json:"sub"`
+    UserID       string `json:"user_id"`
 }
-
-type JWKSKey struct {
-	N   string `json:"n"`
-	E   string `json:"e"`
-	Kid string `json:"kid"`
-}
-
-type JWKS struct {
-	Keys []*JWKSKey `json:"keys"`
-}
-
 type KeySet struct {
-	Keys []*JWKSKey
-	mu   sync.RWMutex
+    Primary    []byte
+    Fallbacks  [][]byte
 }
-
 type MiddlewareFunc func(http.Handler) http.Handler
 
-var (
-	jwksURL = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
-)
+func StartKeySetUpdateRoutine(keys *KeySet) {
+    ticker := time.NewTicker(time.Hour) // Set the ticker to run every hour
+    defer ticker.Stop() // Stop the ticker when the function returns
 
-func fetchJWKS() (*JWKS, error) {
-	resp, err := http.Get(jwksURL)
+    // Define a function to update the key set
+    updateFunc := func() {
+        newKeys := InitKeySet()
+        if err := updateKeysIfNewPrimary(newKeys.Primary, keys); err != nil {
+            // Handle error
+            // For example, log the error
+            log.Println("Failed to update keys:", err)
+        }
+    }
+
+    // Run the update function immediately and then at every tick
+    updateFunc()
+    for {
+        select {
+        case <-ticker.C:
+            updateFunc()
+        }
+    }
+}
+func InitKeySet() KeySet {
+	// Define a struct to represent the JSON data
+	type Key struct {
+		E   string `json:"e"`
+		N   string `json:"n"`
+		Alg string `json:"alg"`
+	}
+
+	type KeyContainer struct {
+		Keys []Key `json:"keys"`
+	}
+	url := "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
+	response, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		fmt.Printf("Error fetching URL: %v", err)
 	}
-	defer resp.Body.Close()
+	defer response.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	// Read the response body
+	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, err
+		fmt.Printf("Error reading response body: %v", err)
 	}
 
-	var jwks JWKS
-	if err := json.Unmarshal(body, &jwks); err != nil {
-		return nil, err
+	// Print the contents of the webpage
+	// fmt.Println(string(body))
+	// Unmarshal JSON data into the defined struct
+	var keyContainer KeyContainer
+	if err := json.Unmarshal([]byte(string(body)), &keyContainer); err != nil {
+		log.Fatal(err)
+	}
+	// count := 0
+
+	// Initialize KeySet
+	var keySet KeySet
+
+	// Iterate over each key and construct public key
+	for _, key := range keyContainer.Keys {
+		// if count < 2 { // Check if it's the second iteration (index 1)
+			// Decode base64url encoded strings
+			modulus, err := decodeBase64URL(key.N)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			exponent, err := decodeBase64URL(key.E)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// Construct big.Int from modulus and exponent
+			modulusInt := new(big.Int)
+			modulusInt.SetBytes(modulus)
+
+			exponentInt := new(big.Int)
+			exponentInt.SetBytes(exponent)
+
+			// Construct rsa.PublicKey
+			publicKey := &rsa.PublicKey{
+				N: modulusInt,
+				E: int(exponentInt.Int64()),
+			}
+
+			// Convert public key to PEM format
+			publicKeyPEM := pem.EncodeToMemory(&pem.Block{
+				Type:  "PUBLIC KEY",
+				Bytes: x509.MarshalPKCS1PublicKey(publicKey),
+			})
+			// Print public key information
+			fmt.Printf("Public Key:\n%s\n", publicKeyPEM)
+
+			// Define fallback public keys
+			fallbackPublicKeys := [][]byte{
+				// Add more fallback keys as needed
+			}
+			keySet.Primary = publicKeyPEM
+			keySet.Fallbacks = fallbackPublicKeys
+			err = updateKeysIfNewPrimary(publicKeyPEM, &keySet)
+			if err != nil {
+				fmt.Println("Failed to update keys:", err)
+			}
+
+			// return keySet
+		// }
+		// count++
 	}
 
-	return &jwks, nil
+	return keySet
 }
-
-func publicKeyFromJWK(key *JWKSKey) (*rsa.PublicKey, error) {
-	modulus, err := decodeBase64URL(key.N)
-	if err != nil {
-		return nil, err
-	}
-
-	exponent, err := decodeBase64URL(key.E)
-	if err != nil {
-		return nil, err
-	}
-
-	pubKey := &rsa.PublicKey{
-		N: new(big.Int).SetBytes(modulus),
-		E: int(new(big.Int).SetBytes(exponent).Int64()),
-	}
-
-	return pubKey, nil
-}
-
-func decodeBase64URL(s string) ([]byte, error) {
-	s = strings.Replace(s, "-", "+", -1)
-	s = strings.Replace(s, "_", "/", -1)
-
-	m := len(s) % 4
-	if m != 0 {
-		s += strings.Repeat("=", 4-m)
-	}
-
-	return base64.StdEncoding.DecodeString(s)
-}
-
-func NewKeySet() (*KeySet, error) {
-	ks := &KeySet{}
-	if err := ks.update(); err != nil {
-		return nil, err
-	}
-
-	go func() {
-		for range time.Tick(time.Hour) {
-			_ = ks.update()
-		}
-	}()
-
-	return ks, nil
-}
-
-func (ks *KeySet) update() error {
-	jwks, err := fetchJWKS()
-	if err != nil {
-		return err
-	}
-
-	keys := make([]*JWKSKey, len(jwks.Keys))
-	for i, key := range jwks.Keys {
-		keys[i] = key
-	}
-
-	sort.Slice(keys, func(i, j int) bool {
-		return keys[i].Kid < keys[j].Kid
-	})
-
-	ks.mu.Lock()
-	defer ks.mu.Unlock()
-
-	ks.Keys = keys
-
-	return nil
-}
-
-func (ks *KeySet) PublicKey(kid string) (*rsa.PublicKey, error) {
-	ks.mu.RLock()
-	defer ks.mu.RUnlock()
-
-	for _, key := range ks.Keys {
-		if key.Kid == kid {
-			return publicKeyFromJWK(key)
-		}
-	}
-
-	return nil, fmt.Errorf("public key not found for kid %s", kid)
-}
-
 func Verify(audience string, algorithm string, keys *KeySet) MiddlewareFunc {
+
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Extract the JWT token from the request headers
 			tokenString := extractToken(r)
 			if tokenString == "" {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
-			claims, err := verifyToken(tokenString, audience, algorithm, keys)
+			// Verify the token
+			err := verifyTokenWithFallback(tokenString, keys, algorithm)
 			if err != nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
+				// Split the token into its three parts: header, payload, and signature
+			parts := strings.Split(tokenString, ".")
+			if len(parts) != 3 {
+				fmt.Println("Invalid token format")
+				return
+			}
+			// Decode and parse the payload (claims)
+			payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+			if err != nil {
+				fmt.Println("Error decoding payload:", err)
+				return
+			}
 
-			ctx := r.Context()
-			ctx = context.WithValue(ctx, "claims", claims)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			// Token is valid, call the next handler
+			// fmt.Println(string(payload))
+			var userToken FirebaseToken
+			if err := json.Unmarshal(payload, &userToken); err != nil {
+				log.Fatal(err)
+			}
+			if userToken.Audience == audience && userToken.Issuer == "https://securetoken.google.com/"+audience {
+				ctx := r.Context() 
+				ctx = context.WithValue(ctx, "claims", string(payload))
+				next.ServeHTTP(w, r.WithContext(ctx))
+				// r.Header.Set("User", string(payload))
+				// next.ServeHTTP(w, r)
+			} else {
+				fmt.Println("Expected JWT audience to be : https://securetoken.google.com/"+audience)
+
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			}
+			
+
+			// next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func verifyToken(tok string, audience, algorithm string, keys *KeySet) (jwt.Claims, error) {
-	token, err := jwt.Parse(tok, func(token *jwt.Token) (interface{}, error) {
-		kid, ok := token.Header["kid"].(string)
-		if !ok {
-			return nil, fmt.Errorf("kid not found in token header")
-		}
-
-		pubKey, err := keys.PublicKey(kid)
-		if err != nil {
-			return nil, err
-		}
-
-		switch {
-		case strings.HasPrefix(algorithm, "ES"):
-			return pubKey, nil
-		case strings.HasPrefix(algorithm, "RS") || strings.HasPrefix(algorithm, "PS"):
-			return pubKey, nil
-		default:
-			return nil, fmt.Errorf("unsupported algorithm")
-		}
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if !token.Valid {
-		return nil, fmt.Errorf("token is not valid")
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		return nil, fmt.Errorf("invalid token claims")
-	}
-
-	aud, ok := claims["aud"].(string)
-	if !ok || aud != audience {
-		return nil, fmt.Errorf("invalid audience")
-	}
-
-	return claims, nil
-}
-
+// extractToken extracts the token from the request headers.
 func extractToken(r *http.Request) string {
 	bearerToken := r.Header.Get("Authorization")
 	if len(bearerToken) > 7 && bearerToken[:7] == "Bearer " {
 		return bearerToken[7:]
 	}
 	return ""
+}
+
+// Check if a new public key is available and update the keys accordingly
+func updateKeysIfNewPrimary(publicKeyPEM []byte, keys *KeySet) error {
+    // Parse the new public key from PEM format
+    block, _ := pem.Decode(publicKeyPEM)
+    if block == nil || block.Type != "PUBLIC KEY" {
+        fmt.Println("failed to decode public key PEM")
+    }
+
+    newPublicKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
+    if err != nil {
+        return fmt.Errorf("failed to parse new public key: %w", err)
+    }
+
+    // Marshal the new public key to byte slice
+    newKeyBytes := x509.MarshalPKCS1PublicKey(newPublicKey)
+
+    // Compare the byte representations of the new public key with the current primary key
+    if !bytes.Equal(newKeyBytes, keys.Primary) {
+        // Update keys if the new public key is different from the current primary key
+        keys.Fallbacks = append(keys.Fallbacks, keys.Primary)
+        keys.Primary = newKeyBytes
+
+        // Cap the number of fallback keys at two
+        if len(keys.Fallbacks) > 3 {
+            keys.Fallbacks = keys.Fallbacks[len(keys.Fallbacks)-3:]
+        }
+    }
+	// fmt.Println( keys.Primary, keys.Fallbacks)
+    return nil
+}
+
+
+// Function to decode base64url encoded string
+func decodeBase64URL(s string) ([]byte, error) {
+	// Convert from base64url to base64
+	s = strings.Replace(s, "-", "+", -1)
+	s = strings.Replace(s, "_", "/", -1)
+	// Add padding if necessary
+	m := len(s) % 4
+	if m != 0 {
+		s += strings.Repeat("=", 4-m)
+	}
+	// Decode base64
+	return base64.StdEncoding.DecodeString(s)
+}
+func verifyTokenWithFallback(tok string, keys *KeySet, algorithm string) error {
+    // Attempt verification with the primary key
+    claims, err := verifyToken(tok, keys.Primary, algorithm)
+    if err == nil {
+        return nil // Token verified successfully with primary key
+    }
+	// fmt.Println(claims)
+    // If verification fails with the primary key and it did not return claims, try fallback keys
+    if claims == nil {
+        // Iterate through the last two fallback keys
+        for i := len(keys.Fallbacks) - 1; i >= 0 && i >= len(keys.Fallbacks)-2; i-- {
+            key := keys.Fallbacks[i]
+            claims, err = verifyToken(tok, key, algorithm)
+            if err == nil {
+                return nil // Token verified successfully with fallback key
+            }
+        }
+    }
+
+    // All attempts failed, return an error
+    return fmt.Errorf("failed to verify token with all keys")
+}
+
+
+func verifyToken(tokData string, publicKey []byte, alg string) (jwt.Claims, error) {
+    // Trim whitespace from token
+    tokData = strings.TrimSpace(tokData)
+    // Parse the token. Load the key from wherever it's set in your program
+    token, err := jwt.Parse(string(tokData), func(t *jwt.Token) (interface{}, error) {
+        if isNone(alg) {
+            return jwt.UnsafeAllowNoneSignatureType, nil
+        }
+        switch {
+        case isEs(alg):
+            return jwt.ParseECPublicKeyFromPEM(publicKey)
+        case isRs(alg):
+            return jwt.ParseRSAPublicKeyFromPEM(publicKey)
+        case isEd(alg):
+            return jwt.ParseEdPublicKeyFromPEM(publicKey)
+        default:
+            return publicKey, nil
+        }
+    })
+
+    if err != nil {
+        return nil, fmt.Errorf("couldn't parse token: %w", err)
+    }
+
+    return token.Claims, nil
+}
+
+// Print a json object in accordance with the prophecy (or the command line options)
+func printJSON(j interface{}) error {
+	var out []byte
+	var err error
+	out, err = json.Marshal(j)
+
+	if err == nil {
+		fmt.Println(string(out))
+	}
+
+	return err
+}
+func isEs(flagAlg string) bool {
+	return strings.HasPrefix(flagAlg, "ES")
+}
+
+func isRs(flagAlg string) bool {
+	return strings.HasPrefix(flagAlg, "RS") || strings.HasPrefix(flagAlg, "PS")
+}
+
+func isEd(flagAlg string) bool {
+	return flagAlg == "EdDSA"
+}
+
+func isNone(flagAlg string) bool {
+	return flagAlg == "none"
 }
