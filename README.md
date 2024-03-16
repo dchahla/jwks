@@ -1,3 +1,7 @@
+## How does it work?
+Pulls modulus from "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
+
+
 ## Basic Example
 	
 	import (
@@ -14,8 +18,15 @@
 		AllowedHeaders: []string{"Authorization", "Content-Type"},
 	}).Handler)
 
-  
-	AUDIENCE := os.Getenv("AUDIENCE") //  define audience (string)
+	//  define audience (string)
+	AUDIENCE := os.Getenv("AUDIENCE")
+
+	//  cache public keys
 	keys := jwks.InitKeySet() 
 
-	middleware := jwks.Verify(AUDIENCE, "RS256", &keys) // set up middleware to use audience and keys
+	//  set up middleware to use audience and keys
+	middleware := jwks.Verify(AUDIENCE, "RS256", &keys)
+
+	//  release the hounds! (apply the middleware.)
+	router.PathPrefix("/api/v1/app/delegation/groups").Handler(middleware(http.HandlerFunc(getGroupsHandler)))
+
