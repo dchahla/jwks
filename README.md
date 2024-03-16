@@ -1,4 +1,4 @@
-## Basic Usage Example
+## Basic Example
 	
 	import (
 		...
