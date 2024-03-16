@@ -6,6 +6,6 @@
 	 	...
 	)
 	 
- 	keys := jwks.InitKeySet() // <---- cache public keys
-	middleware := jwks.Verify(AUDIENCE, "RS256", &keys)
-	
+	AUDIENCE := os.Getenv("AUDIENCE") //  define audience (string)
+	keys := jwks.InitKeySet() 
+
