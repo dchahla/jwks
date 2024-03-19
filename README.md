@@ -3,8 +3,8 @@ Go implementation of [jwks-rsa](https://www.npmjs.com/package/jwks-rsa)
 
 ## How does it work?
 - Pulls [modulus](https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com)
-- Creates Public Keys[]
-- Verifies tokens based Audience and Public Keys[]
+- Creates []Public Keys
+- Verifies tokens based Audience and []Public Keys
 
 ## Why?
 - Same reason the node one exists. The Firebase Admin SDK is clunky just for verifying tokens. Also, versioning becomes a pain.
